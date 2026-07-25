@@ -1,0 +1,59 @@
+{
+  "username": "sujitwave2",
+  "fullName": "Sujit Chaudhary",
+  "tagline": "Software Engineer & Indie Creator",
+  "bio": "Building high-quality digital products, developer templates, and modern SaaS boilerplates. Helping developers ship products faster and write cleaner code.",
+  "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+  "accentColor": "#ff90e8",
+  "socials": {
+    "twitter": "https://twitter.com/sujitwave2",
+    "github": "https://github.com/sujitchaudhary",
+    "website": "https://sujitchaudhary.tech"
+  },
+  "theme": "dark",
+  "emailSignup": {
+    "enabled": true,
+    "title": "Join the Wave Newsletter",
+    "description": "Get notified about new templates, React boilerplates, and developer resources. No spam, unsubscribe anytime.",
+    "buttonText": "Subscribe Now",
+    "successMessage": "Thanks for subscribing! Check your inbox for updates."
+  },
+  "products": [
+    {
+      "id": "saas-boilerplate",
+      "name": "ShipFast Next.js Boilerplate",
+      "description": "The ultimate Next.js starter kit with Auth, Database, Stripe, and modern UI components. Build and launch your SaaS in days.",
+      "price": "$79",
+      "rating": 4.9,
+      "reviews": 42,
+      "tag": "Best Seller",
+      "url": "https://sujitwave2.gumroad.com/l/saas-boilerplate",
+      "image": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80",
+      "category": "SaaS Starter"
+    },
+    {
+      "id": "ui-kit",
+      "name": "Wave UI Tailwind Kit",
+      "description": "Over 120+ beautifully designed, accessible, and responsive React & Tailwind CSS components for modern web dashboards.",
+      "price": "$29",
+      "rating": 4.8,
+      "reviews": 18,
+      "tag": "Popular",
+      "url": "https://sujitwave2.gumroad.com/l/ui-kit",
+      "image": "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80",
+      "category": "Design System"
+    },
+    {
+      "id": "typescript-ebook",
+      "name": "Mastering TypeScript & React",
+      "description": "An interactive guidebook covering advanced type safety, generic components, state management, and production-ready React architectural patterns.",
+      "price": "$19",
+      "rating": 5.0,
+      "reviews": 31,
+      "tag": "Ebook",
+      "url": "https://sujitwave2.gumroad.com/l/typescript-ebook",
+      "image": "https://images.unsplash.com/photo-1516116211223-5c359a36298a?auto=format&fit=crop&w=600&q=80",
+      "category": "Education"
+    }
+  ]
+}

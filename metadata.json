@@ -1,0 +1,6 @@
+{
+  "name": "Gumroad Profile Designer",
+  "description": "Interactive visual profile customizer and CLI publishing manager for Gumroad profiles (@sujitwave2). Supports full live HTML preview, email signup configurations, and deployment logs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
