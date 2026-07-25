@@ -187,7 +187,24 @@ app.post("/api/cli/run", (req, res) => {
         };
         const configContent = JSON.stringify(backupConfig, null, 2);
 
-        logs.push(`${timestamp()} Committing 'profile.html'...`);
+        logs.push(`${timestamp()} Committing 'index.html' (primary homepage)...`);
+        const pushIndex = await pushFileToGitHub({
+          owner,
+          repo: repoName,
+          filePath: "index.html",
+          content: htmlContent,
+          token: github.token,
+          branch,
+          commitMessage: "Update Gumroad profile homepage [skip ci]"
+        });
+
+        if (!pushIndex.success) {
+          logs.push(`${timestamp()} ❌ GitHub API failed index.html: ${pushIndex.error}`);
+          return res.json({ logs });
+        }
+        logs.push(`${timestamp()} Committed index.html successfully.`);
+
+        logs.push(`${timestamp()} Committing backup 'profile.html'...`);
         const pushHtml = await pushFileToGitHub({
           owner,
           repo: repoName,
@@ -195,14 +212,14 @@ app.post("/api/cli/run", (req, res) => {
           content: htmlContent,
           token: github.token,
           branch,
-          commitMessage: "Update Gumroad profile landing page [skip ci]"
+          commitMessage: "Update Gumroad profile landing page backup [skip ci]"
         });
 
         if (!pushHtml.success) {
-          logs.push(`${timestamp()} ❌ GitHub API failed profile.html: ${pushHtml.error}`);
-          return res.json({ logs });
+          logs.push(`${timestamp()} ⚠️ Warning: Failed backing up to profile.html: ${pushHtml.error}`);
+        } else {
+          logs.push(`${timestamp()} Committed profile.html backup successfully.`);
         }
-        logs.push(`${timestamp()} Committed profile.html (SHA: ${pushHtml.sha?.substring(0, 7)})`);
 
         logs.push(`${timestamp()} Backing up 'gumroad-config.json'...`);
         const pushJson = await pushFileToGitHub({
@@ -363,7 +380,24 @@ app.post("/api/github/push", async (req, res) => {
     };
     const configContent = JSON.stringify(backupConfig, null, 2);
 
-    logs.push(`${timestamp()} Uploading 'profile.html'...`);
+    logs.push(`${timestamp()} Uploading 'index.html' (primary homepage)...`);
+    const pushIndex = await pushFileToGitHub({
+      owner,
+      repo: repoName,
+      filePath: "index.html",
+      content: htmlContent,
+      token: github.token,
+      branch,
+      commitMessage: "Update Gumroad profile homepage [skip ci]"
+    });
+
+    if (!pushIndex.success) {
+      logs.push(`${timestamp()} ❌ Failed uploading index.html: ${pushIndex.error}`);
+      return res.status(500).json({ success: false, error: pushIndex.error, logs });
+    }
+    logs.push(`${timestamp()} 'index.html' uploaded successfully!`);
+
+    logs.push(`${timestamp()} Uploading backup 'profile.html'...`);
     const pushHtml = await pushFileToGitHub({
       owner,
       repo: repoName,
@@ -371,14 +405,14 @@ app.post("/api/github/push", async (req, res) => {
       content: htmlContent,
       token: github.token,
       branch,
-      commitMessage: "Update Gumroad profile landing page [skip ci]"
+      commitMessage: "Update Gumroad profile landing page backup [skip ci]"
     });
 
     if (!pushHtml.success) {
-      logs.push(`${timestamp()} ❌ Failed uploading profile.html: ${pushHtml.error}`);
-      return res.status(500).json({ success: false, error: pushHtml.error, logs });
+      logs.push(`${timestamp()} ⚠️ Warning: Failed uploading profile.html backup (proceeding anyways): ${pushHtml.error}`);
+    } else {
+      logs.push(`${timestamp()} 'profile.html' backup uploaded successfully!`);
     }
-    logs.push(`${timestamp()} 'profile.html' uploaded successfully! (SHA: ${pushHtml.sha?.substring(0, 7)})`);
 
     logs.push(`${timestamp()} Uploading 'gumroad-config.json' backup...`);
     const pushJson = await pushFileToGitHub({
