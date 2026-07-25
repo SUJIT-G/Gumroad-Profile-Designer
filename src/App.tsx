@@ -37,7 +37,12 @@ export default function App() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   
   // Customizer accordion active tab
-  const [activeTab, setActiveTab] = useState<"general" | "products" | "socials" | "newsletter" | "cli">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "products" | "socials" | "newsletter" | "github" | "cli">("general");
+
+  // GitHub integration states
+  const [isGithubPushing, setIsGithubPushing] = useState(false);
+  const [githubPushSuccess, setGithubPushSuccess] = useState<boolean | null>(null);
+  const [githubPagesUrl, setGithubPagesUrl] = useState<string | null>(null);
 
   // Device / preview simulator state
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
@@ -48,7 +53,8 @@ export default function App() {
   const [cliLogs, setCliLogs] = useState<string[]>([
     "Gumroad Pages CLI v1.0.0 is initialized and ready.",
     "Type 'gumroad pages preview' to start local preview server.",
-    "Type 'gumroad pages push profile' to publish your landing page."
+    "Type 'gumroad pages push profile' to build local profile page.",
+    "Type 'gumroad pages push github' or 'git push' to sync and publish to your GitHub Pages repository."
   ]);
   const [cliCommand, setCliCommand] = useState("");
   const [isCliLoading, setIsCliLoading] = useState(false);
@@ -60,6 +66,14 @@ export default function App() {
     fetch("/api/config")
       .then(res => res.json())
       .then((data: GumroadConfig) => {
+        if (!data.github) {
+          data.github = {
+            repository: "sujitwave2/gumroad-profile",
+            branch: "main",
+            token: "",
+            enabled: true
+          };
+        }
         setConfig(data);
         setOriginalConfig(JSON.parse(JSON.stringify(data)));
         // Align preview theme with user's configured default theme
@@ -197,6 +211,45 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  // Trigger GitHub push
+  const triggerGithubPush = async () => {
+    if (isGithubPushing) return;
+    setIsGithubPushing(true);
+    setGithubPushSuccess(null);
+    setGithubPagesUrl(null);
+    
+    setCliLogs(prev => [...prev, "[Workspace] Auto-saving workspace state before GitHub push..."]);
+    await saveChanges();
+    
+    try {
+      setCliLogs(prev => [...prev, "[GitHub Sync] Connecting to server-side push engine..."]);
+      const res = await fetch("/api/github/push", {
+        method: "POST"
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setGithubPushSuccess(true);
+        setGithubPagesUrl(data.pagesUrl);
+        if (data.logs) {
+          setCliLogs(prev => [...prev, ...data.logs]);
+        }
+      } else {
+        setGithubPushSuccess(false);
+        if (data.logs) {
+          setCliLogs(prev => [...prev, ...data.logs]);
+        }
+        alert(data.error || "GitHub push failed. Please review your settings.");
+      }
+    } catch (err) {
+      console.error("GitHub Push error:", err);
+      setGithubPushSuccess(false);
+      setCliLogs(prev => [...prev, "❌ Error: Failed to contact the backend service for GitHub push."]);
+    } finally {
+      setIsGithubPushing(false);
+    }
+  };
+
   // Simulated CLI trigger
   const runSimulatedCli = async (cmd: string) => {
     if (!cmd.trim() || isCliLoading) return;
@@ -206,8 +259,8 @@ export default function App() {
     setCliCommand("");
     setCliLogs(prev => [...prev, `> ${formattedCmd}`]);
 
-    // Save changes first if they push profile, so the build has latest changes
-    if (formattedCmd === "gumroad pages push profile") {
+    // Save changes first if they push profile or push github, so the build has latest changes
+    if (formattedCmd === "gumroad pages push profile" || formattedCmd === "gumroad pages push github" || formattedCmd === "git push" || formattedCmd === "git push origin main") {
       setCliLogs(prev => [...prev, "[Workspace] Auto-saving workspace state..."]);
       await saveChanges();
     }
@@ -718,6 +771,144 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {/* Tab 5: GitHub Pages & Repository Publishing */}
+            <div className="border border-slate-800 rounded-xl overflow-hidden bg-[#0e111a]/50">
+              <button 
+                onClick={() => setActiveTab(activeTab === "github" ? "cli" : "github")}
+                className="w-full px-5 py-4 bg-[#0e111a] flex items-center justify-between text-left text-sm font-semibold text-white hover:bg-slate-800/30 transition-colors"
+                id="tab-github-toggle"
+              >
+                <span className="flex items-center gap-2.5">
+                  <Github className="w-4 h-4 text-fuchsia-400" />
+                  GitHub Repository Settings
+                </span>
+                {activeTab === "github" ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+              </button>
+
+              {activeTab === "github" && (
+                <div className="p-5 space-y-4 border-t border-slate-800 text-xs text-slate-300" id="tab-github-content">
+                  <div className="flex items-center justify-between bg-[#151922] border border-slate-800 p-3 rounded-lg">
+                    <div>
+                      <h4 className="font-bold text-white">Enable Auto Backup</h4>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Uploads config and compiled profile code</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={config.github?.enabled ?? true}
+                        onChange={(e) => updateNestedField("github", "enabled", e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-4 after:width-4 after:w-4 after:transition-all peer-checked:bg-fuchsia-500"></div>
+                    </label>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-slate-400 flex items-center gap-1.5">
+                      Target Repository (owner/repo)
+                    </label>
+                    <input 
+                      type="text" 
+                      value={config.github?.repository || ""}
+                      onChange={(e) => updateNestedField("github", "repository", e.target.value)}
+                      className="w-full bg-[#151922] border border-slate-800 rounded-lg px-3 py-2.5 focus:border-fuchsia-500 outline-none text-slate-200 transition-colors"
+                      placeholder="e.g. sujitwave2/gumroad-profile"
+                    />
+                    <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5">
+                      Create a public or private repository on GitHub first, then enter its name here.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-slate-400">Target Branch</label>
+                    <input 
+                      type="text" 
+                      value={config.github?.branch || "main"}
+                      onChange={(e) => updateNestedField("github", "branch", e.target.value)}
+                      className="w-full bg-[#151922] border border-slate-800 rounded-lg px-3 py-2.5 focus:border-fuchsia-500 outline-none text-slate-200 transition-colors"
+                      placeholder="main"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-slate-400 flex items-center gap-1.5">
+                      Personal Access Token (PAT)
+                    </label>
+                    <input 
+                      type="password" 
+                      value={config.github?.token || ""}
+                      onChange={(e) => updateNestedField("github", "token", e.target.value)}
+                      className="w-full bg-[#151922] border border-slate-800 rounded-lg px-3 py-2.5 focus:border-fuchsia-500 outline-none text-slate-200 transition-colors font-mono"
+                      placeholder="ghp_************************************"
+                    />
+                    <div className="bg-[#121620] border border-slate-800/80 p-2.5 rounded-lg text-[10px] text-slate-400 leading-relaxed space-y-1 mt-1">
+                      <p className="font-semibold text-slate-300">How to create a Personal Access Token:</p>
+                      <ol className="list-decimal pl-4 space-y-0.5">
+                        <li>Go to <span className="text-fuchsia-400 font-medium">GitHub Settings</span> &rarr; Developer Settings</li>
+                        <li>Click <span className="font-medium">Personal Access Tokens</span> &rarr; Fine-grained Tokens (or Classic)</li>
+                        <li>Generate a token with <span className="text-slate-200 font-mono">Contents: Read/Write</span> scope for this repository</li>
+                        <li>Copy and paste the token here</li>
+                      </ol>
+                    </div>
+                  </div>
+
+                  {githubPushSuccess !== null && (
+                    <div className={`p-3 rounded-lg flex items-start gap-2 border text-[11px] ${
+                      githubPushSuccess 
+                        ? "bg-emerald-950/40 border-emerald-800/60 text-emerald-300" 
+                        : "bg-rose-950/40 border-rose-800/60 text-rose-300"
+                    }`}>
+                      {githubPushSuccess ? (
+                        <>
+                          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-semibold text-emerald-200">Push Succeeded!</p>
+                            <p className="mt-0.5">Files uploaded to GitHub successfully. If Pages is enabled, view your site at:</p>
+                            {githubPagesUrl && (
+                              <a 
+                                href={githubPagesUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-fuchsia-400 hover:underline font-semibold mt-1 flex items-center gap-1 inline-flex"
+                              >
+                                {githubPagesUrl} <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-semibold text-rose-200">Push Failed</p>
+                            <p className="mt-0.5">Verify repository name, token scopes, and internet connectivity, then try again.</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={triggerGithubPush}
+                    disabled={isGithubPushing || !config.github?.repository || !config.github?.token}
+                    className="w-full py-2.5 bg-fuchsia-600 hover:bg-fuchsia-500 disabled:bg-[#151922] disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2 text-xs shadow-md shadow-fuchsia-950/30 active:scale-[0.98]"
+                  >
+                    {isGithubPushing ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Pushing to GitHub...
+                      </>
+                    ) : (
+                      <>
+                        <Github className="w-3.5 h-3.5" />
+                        Push Profile to GitHub Pages
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
             
           </div>
         </div>
@@ -906,11 +1097,21 @@ export default function App() {
                       <span>Publish Profile</span>
                       <ArrowRight className="w-3.5 h-3.5 text-fuchsia-600 group-hover:text-fuchsia-400 group-hover:translate-x-0.5 transition-all" />
                     </button>
+                    <button
+                      onClick={() => runSimulatedCli("gumroad pages push github")}
+                      disabled={isCliLoading}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg text-left hover:text-white transition-all flex items-center justify-between group active:scale-[0.98]"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Github className="w-3.5 h-3.5 text-slate-400" /> Push to GitHub
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-fuchsia-400 group-hover:translate-x-0.5 transition-all" />
+                    </button>
                   </div>
 
                   <div className="text-[10px] text-slate-500 leading-relaxed border-t border-slate-850 pt-2 block md:flex md:flex-col" id="cli-hints">
                     <p className="font-semibold text-slate-400 mb-0.5">CLI Terminal Tips:</p>
-                    <p>Both <code className="font-mono text-slate-400">preview</code> and <code className="font-mono text-slate-400">push</code> are fully integrated. Running push compiles and writes to <code className="font-mono text-slate-400">profile.html</code> on the actual server disk.</p>
+                    <p>Both <code className="font-mono text-slate-400">preview</code> and <code className="font-mono text-slate-400">push</code> are fully integrated. Running <code className="font-mono text-slate-400">gumroad pages push github</code> compiles and commits the code directly to your GitHub repository.</p>
                   </div>
                 </div>
 

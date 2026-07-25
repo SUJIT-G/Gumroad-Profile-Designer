@@ -25,6 +25,13 @@ export interface Product {
   category: string;
 }
 
+export interface GitHubConfig {
+  repository: string;
+  branch: string;
+  token: string;
+  enabled: boolean;
+}
+
 export interface GumroadConfig {
   username: string;
   fullName: string;
@@ -36,6 +43,7 @@ export interface GumroadConfig {
   theme: 'dark' | 'light' | 'system';
   emailSignup: EmailSignup;
   products: Product[];
+  github?: GitHubConfig;
 }
 
 export function compileProfileHtml(config: GumroadConfig): string {
