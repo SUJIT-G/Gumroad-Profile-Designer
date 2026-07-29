@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { compileProfileHtml, GumroadConfig } from "./src/lib/compiler.ts";
+import { GoogleGenAI } from "@google/genai";
 
 const app = express();
 const PORT = 3000;
@@ -10,6 +11,35 @@ const PORT = 3000;
 app.use(express.json());
 
 const configPath = path.join(process.cwd(), "gumroad-config.json");
+
+let ai: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI | null {
+  if (!ai) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey) {
+      ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+    }
+  }
+  return ai;
+}
+
+function cleanHtml(html: string): string {
+  // Remove script tags and style tags content
+  let cleaned = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  cleaned = cleaned.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+  // Remove SVG tags content
+  cleaned = cleaned.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '');
+  // Remove multiple spaces/newlines
+  cleaned = cleaned.replace(/\s+/g, ' ');
+  return cleaned;
+}
 
 // Helper to read config
 function readConfig(): GumroadConfig {
@@ -77,6 +107,166 @@ app.post("/api/config", (req, res) => {
     res.json({ success: true, message: "Configuration saved successfully!" });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || "Failed to write config" });
+  }
+});
+
+// Sync products from live Gumroad profile using Gemini scraping
+app.post("/api/gumroad/sync", async (req, res) => {
+  const { username } = req.body;
+  if (!username) {
+    return res.status(400).json({ success: false, error: "Username is required" });
+  }
+
+  const logs: string[] = [];
+  const timestamp = () => `[${new Date().toTimeString().split(' ')[0]}]`;
+
+  logs.push(`${timestamp()} 🔄 Sync request received for @${username}...`);
+  
+  try {
+    const profileUrl = `https://${username}.gumroad.com`;
+    logs.push(`${timestamp()} 🌐 Fetching live Gumroad profile: ${profileUrl}...`);
+
+    const response = await fetch(profileUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5"
+      }
+    });
+
+    if (response.status !== 200) {
+      logs.push(`${timestamp()} ❌ Gumroad returned status ${response.status}. Profile may be private or username is incorrect.`);
+      return res.status(400).json({ 
+        success: false, 
+        error: `Gumroad profile for '${username}' could not be accessed (HTTP ${response.status}).`,
+        logs 
+      });
+    }
+
+    const html = await response.text();
+    logs.push(`${timestamp()} 📄 Profile fetched successfully. Body size: ${(html.length / 1024).toFixed(1)} KB.`);
+
+    // Check if GEMINI_API_KEY is available
+    const gemini = getGeminiClient();
+    if (!gemini) {
+      logs.push(`${timestamp()} ⚠️ Warning: GEMINI_API_KEY is not configured on the server.`);
+      logs.push(`${timestamp()} 💡 To enable automated product scraping, set GEMINI_API_KEY in Settings.`);
+      return res.status(400).json({
+        success: false,
+        error: "GEMINI_API_KEY environment variable is not configured. Please add your key under Settings > Secrets.",
+        logs
+      });
+    }
+
+    logs.push(`${timestamp()} 🧽 Cleaning HTML contents for optimized AI processing...`);
+    const cleanedHtml = cleanHtml(html);
+    logs.push(`${timestamp()} 🧼 HTML cleaned. Compact size: ${(cleanedHtml.length / 1024).toFixed(1)} KB.`);
+
+    logs.push(`${timestamp()} 🤖 Sending cleaned layout to Gemini API for product extraction...`);
+
+    const prompt = `You are an expert Gumroad scraper bot.
+Parse the following cleaned HTML from the Gumroad profile page of user @${username}.
+Identify all products listed on this page.
+For each product, extract:
+- "name": The product title/name
+- "description": A short, clear description of the product. If not found, write a short 1-sentence description based on the name.
+- "price": The price badge (e.g., "$19", "$0+", "Free", "$49/yr")
+- "rating": Average rating as a number (1.0 to 5.0, default to 5.0 if not rated)
+- "reviews": Total review count as an integer (default to 0)
+- "tag": A product highlights badge (e.g. "Best Seller", "Ebook", "Popular", "New", "Software" or empty string if none)
+- "url": The exact checkout/product URL (make sure to extract the absolute URL of the product card link or purchase link, e.g., "https://${username}.gumroad.com/l/...")
+- "image": The product cover image/thumbnail URL. Make sure to extract the real image URL from the img sources.
+- "category": A single-word category that fits best (e.g., "SaaS", "Design", "Education", "Software", "Ebook", "Utility")
+
+Also extract the profile's fullName and bio if visible in the HTML.
+
+Return ONLY a JSON object of this structure:
+{
+  "fullName": "...",
+  "bio": "...",
+  "products": [
+    {
+      "name": "...",
+      "description": "...",
+      "price": "...",
+      "rating": 4.8,
+      "reviews": 12,
+      "tag": "...",
+      "url": "...",
+      "image": "...",
+      "category": "..."
+    }
+  ]
+}
+
+HTML Content:
+${cleanedHtml}`;
+
+    const geminiRes = await gemini.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const text = geminiRes.text;
+    if (!text) {
+      throw new Error("Empty response from Gemini API");
+    }
+
+    const parsedResult = JSON.parse(text);
+    if (!parsedResult.products || !Array.isArray(parsedResult.products)) {
+      throw new Error("Invalid response format from Gemini: missing 'products' array");
+    }
+
+    logs.push(`${timestamp()} 🎉 Gemini successfully extracted ${parsedResult.products.length} products!`);
+    
+    // Fallbacks and sanitize
+    const updatedFullName = parsedResult.fullName || undefined;
+    const updatedBio = parsedResult.bio || undefined;
+    const products = parsedResult.products.map((p: any) => ({
+      id: Math.random().toString(36).substring(2, 9),
+      name: p.name || "Untitled Product",
+      description: p.description || "No description provided.",
+      price: p.price || "$0",
+      rating: typeof p.rating === "number" ? p.rating : 5.0,
+      reviews: typeof p.reviews === "number" ? p.reviews : 0,
+      tag: p.tag || "",
+      url: p.url || `https://${username}.gumroad.com`,
+      image: p.image || "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80",
+      category: p.category || "Digital"
+    }));
+
+    logs.push(`${timestamp()} 💾 Updating local configuration file 'gumroad-config.json'...`);
+
+    // Read current config and merge
+    const currentConfig = readConfig();
+    currentConfig.username = username;
+    currentConfig.products = products;
+    if (updatedFullName && (currentConfig.fullName === "Sujit Chaudhary" || !currentConfig.fullName)) {
+      currentConfig.fullName = updatedFullName;
+    }
+    if (updatedBio && (currentConfig.bio.startsWith("Building high-quality") || !currentConfig.bio)) {
+      currentConfig.bio = updatedBio;
+    }
+
+    fs.writeFileSync(configPath, JSON.stringify(currentConfig, null, 2), "utf8");
+    logs.push(`${timestamp()} ✅ Local configuration successfully synced and saved!`);
+
+    res.json({
+      success: true,
+      logs,
+      config: currentConfig
+    });
+
+  } catch (err: any) {
+    logs.push(`${timestamp()} ❌ Sync failed: ${err.message}`);
+    res.status(500).json({
+      success: false,
+      error: err.message || "Failed to sync products",
+      logs
+    });
   }
 });
 

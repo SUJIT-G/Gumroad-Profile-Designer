@@ -35,6 +35,7 @@ export default function App() {
   const [originalConfig, setOriginalConfig] = useState<GumroadConfig | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // Customizer accordion active tab
   const [activeTab, setActiveTab] = useState<"general" | "products" | "socials" | "newsletter" | "github" | "cli">("general");
@@ -180,6 +181,45 @@ export default function App() {
       console.error("Failed to save changes:", err);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Sync products from live Gumroad profile using server-side scraper and Gemini
+  const syncFromGumroad = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    
+    // Open terminal console drawer to show logs progress!
+    setShowCli(true);
+    setCliLogs(prev => [...prev, `[Gumroad Sync] Starting product synchronization for @${config.username}...`]);
+    
+    try {
+      const res = await fetch("/api/gumroad/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: config.username })
+      });
+      const data = await res.json();
+      
+      if (data.success && data.config) {
+        setConfig(data.config);
+        setOriginalConfig(JSON.parse(JSON.stringify(data.config)));
+        if (data.logs) {
+          setCliLogs(prev => [...prev, ...data.logs]);
+        }
+        alert(`Successfully synced ${data.config.products.length} products from @${config.username}!`);
+      } else {
+        if (data.logs) {
+          setCliLogs(prev => [...prev, ...data.logs]);
+        }
+        alert(data.error || "Failed to sync products. Ensure your Gumroad username is valid and live.");
+      }
+    } catch (err: any) {
+      console.error("Sync error:", err);
+      setCliLogs(prev => [...prev, "❌ Error: Failed to contact backend for Gumroad Sync."]);
+      alert("Failed to sync products. Make sure your server is running and internet is active.");
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -502,14 +542,25 @@ export default function App() {
 
               {activeTab === "products" && (
                 <div className="p-5 space-y-6 border-t border-slate-800" id="tab-products-content">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Showcase List</span>
-                    <button 
-                      onClick={addProduct}
-                      className="px-2.5 py-1.5 bg-fuchsia-950/60 border border-fuchsia-800 text-fuchsia-400 hover:bg-fuchsia-900/40 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all active:scale-95"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add Product
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button 
+                        onClick={syncFromGumroad}
+                        disabled={isSyncing}
+                        className="px-2.5 py-1.5 bg-emerald-950/60 border border-emerald-800 text-emerald-400 hover:bg-emerald-900/40 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all active:scale-95 disabled:opacity-55"
+                        title="Import/Sync all products directly from your live Gumroad profile"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                        {isSyncing ? "Syncing..." : "Sync Gumroad"}
+                      </button>
+                      <button 
+                        onClick={addProduct}
+                        className="px-2.5 py-1.5 bg-fuchsia-950/60 border border-fuchsia-800 text-fuchsia-400 hover:bg-fuchsia-900/40 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all active:scale-95"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Product
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1">
