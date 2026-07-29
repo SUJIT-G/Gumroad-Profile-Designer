@@ -178,12 +178,13 @@ For each product, extract:
 - "image": The product cover image/thumbnail URL. Make sure to extract the real image URL from the img sources.
 - "category": A single-word category that fits best (e.g., "SaaS", "Design", "Education", "Software", "Ebook", "Utility")
 
-Also extract the profile's fullName and bio if visible in the HTML.
+Also extract the profile's fullName, bio, and "avatarUrl" (the main profile picture or logo image URL, usually at the top of the profile page, hosted on public-files.gumroad.com or similar) if visible in the HTML.
 
 Return ONLY a JSON object of this structure:
 {
   "fullName": "...",
   "bio": "...",
+  "avatarUrl": "...",
   "products": [
     {
       "name": "...",
@@ -225,6 +226,7 @@ ${cleanedHtml}`;
     // Fallbacks and sanitize
     const updatedFullName = parsedResult.fullName || undefined;
     const updatedBio = parsedResult.bio || undefined;
+    const updatedAvatarUrl = parsedResult.avatarUrl || undefined;
     const products = parsedResult.products.map((p: any) => ({
       id: Math.random().toString(36).substring(2, 9),
       name: p.name || "Untitled Product",
@@ -249,6 +251,9 @@ ${cleanedHtml}`;
     }
     if (updatedBio && (currentConfig.bio.startsWith("Building high-quality") || !currentConfig.bio)) {
       currentConfig.bio = updatedBio;
+    }
+    if (updatedAvatarUrl) {
+      currentConfig.avatarUrl = updatedAvatarUrl;
     }
 
     fs.writeFileSync(configPath, JSON.stringify(currentConfig, null, 2), "utf8");
