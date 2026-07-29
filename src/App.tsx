@@ -352,6 +352,16 @@ export default function App() {
             )}
             {isSaving ? "Saving..." : saveSuccess ? "Saved!" : "Save Configuration"}
           </button>
+
+          <button
+            onClick={downloadHtmlFile}
+            className="px-4 py-2 text-xs font-bold rounded-lg flex items-center gap-2 bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white shadow-md shadow-indigo-950/40 active:scale-95 transition-all"
+            id="header-download-button"
+            title="Download your compiled profile.html file instantly"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Download HTML Page
+          </button>
         </div>
       </header>
 

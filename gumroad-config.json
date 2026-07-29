@@ -55,5 +55,11 @@
       "image": "https://images.unsplash.com/photo-1516116211223-5c359a36298a?auto=format&fit=crop&w=600&q=80",
       "category": "Education"
     }
-  ]
+  ],
+  "github": {
+    "repository": "SUJIT-G/gumroad-profile",
+    "branch": "main",
+    "token": "",
+    "enabled": true
+  }
 }
